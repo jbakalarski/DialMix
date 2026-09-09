@@ -24,7 +24,7 @@ public sealed class DialMixConfiguration
     public List<ControlConfiguration> Controls { get; set; } = [];
 }
 
-public sealed record AudioTargetInfo(string Id, string Name, TargetType Type, float Volume, bool Muted, bool Available, string? ProcessName = null);
+public sealed record AudioTargetInfo(string Id, string Name, TargetType Type, float Volume, bool Muted, bool Available, string? ProcessName = null, string? Icon = null);
 public sealed record VolumeChange(string TargetId, float Volume, bool Muted);
 
 public static class VolumeMath

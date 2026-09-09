@@ -13,6 +13,7 @@
     .check input { accent-color: #fff; }
     .color { display: grid; grid-template-columns: 1fr 72px; gap: 8px; align-items: center; }
     input[type=color] { width: 100%; height: 30px; padding: 1px; background: #333; border: 1px solid #555; border-radius: 4px; }
+    textarea { width: 100%; min-height: 74px; box-sizing: border-box; padding: 7px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font: 12px monospace; resize: vertical; }
     #targetStatus { min-height: 18px; margin-top: 5px; color: #aaa; font-size: 12px; }
     #targetStatus.error { color: #ff9a9a; }
   </style>
@@ -27,6 +28,9 @@
   <select id="press"><option value="toggleMute">Toggle mute</option><option value="none">None</option></select>
   <fieldset><legend>Displayed elements</legend>
     <label class="check"><input id="showIcon" type="checkbox" checked> Icon</label>
+    <label class="check"><input id="autoApplicationIcon" type="checkbox" checked> Automatically load application icon</label>
+    <label for="customIcon">Custom icon (SVG or data URL, optional)</label>
+    <textarea id="customIcon" placeholder="Paste an SVG or data:image/... URL"></textarea>
     <label class="check"><input id="showSource" type="checkbox" checked> Source name</label>
     <label class="check"><input id="showVolume" type="checkbox" checked> Volume percentage</label>
     <label class="check"><input id="showBar" type="checkbox" checked> Volume bar</label>
@@ -41,18 +45,18 @@
     <label>Background <span class="color"><input id="backgroundColor" type="text" value="#000000"><input id="backgroundColorPicker" type="color" value="#000000"></span></label>
   </fieldset>
   <script>
-    const defaults = { targetId:'system', step:5, pressAction:'toggleMute', showIcon:true, showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
+    const defaults = { targetId:'system', step:5, pressAction:'toggleMute', showIcon:true, autoApplicationIcon:true, customIcon:'', showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
     let socket = null;
     let context = null;
     let action = 'com.dialmix.audio.control';
     let selectedTargetId = defaults.targetId;
     const target = document.querySelector('#target');
     const targetStatus = document.querySelector('#targetStatus');
-    const fields = ['target','step','press','showIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
+    const fields = ['target','step','press','showIcon','autoApplicationIcon','customIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
     const value = id => document.querySelector(`#${id}`);
     function setColor(id, color) { value(id).value = color; value(`${id}Picker`).value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#FFFFFF'; }
-    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; selectedTargetId = s.targetId || defaults.targetId; if ([...target.options].some(option => option.value === selectedTargetId)) target.value = selectedTargetId; value('step').value = s.step; value('press').value = s.pressAction; ['showIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
-    function currentSettings() { const s = { targetId:target.value || selectedTargetId, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value }; ['showIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
+    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; selectedTargetId = s.targetId || defaults.targetId; if ([...target.options].some(option => option.value === selectedTargetId)) target.value = selectedTargetId; value('step').value = s.step; value('press').value = s.pressAction; value('customIcon').value = s.customIcon || ''; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
+    function currentSettings() { const s = { targetId:target.value || selectedTargetId, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value, customIcon:value('customIcon').value.trim() }; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
     function save() { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
     function applyTargets(targets) { const selected = target.value || selectedTargetId; target.replaceChildren(); (targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); if ([...target.options].some(option => option.value === selected)) target.value = selected; }
     function showTargetStatus(message, isError = false) { targetStatus.textContent = message; targetStatus.classList.toggle('error', isError); }

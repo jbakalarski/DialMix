@@ -20,4 +20,4 @@ The action property inspector controls the information rendered on the Stream De
 - current volume percentage, or `MUTED` when the target is muted;
 - volume bar.
 
-All four elements are enabled by default. The icon, source name, volume text, bar fill, bar track, bar border, and background colors can be changed independently with six-digit hexadecimal colors such as `#FFFFFF`. The default foreground color is `#FFFFFF`; the dark track and background provide contrast for the white feedback.
+All four elements are enabled by default. For application targets, `Automatically load application icon` uses the icon embedded in the application's executable. A custom SVG or image data URL overrides the automatic and built-in icons when provided. The icon, source name, volume text, bar fill, bar track, bar border, and background colors can be changed independently with six-digit hexadecimal colors such as `#FFFFFF`. The default foreground color is `#FFFFFF`; the dark track and background provide contrast for the white feedback.

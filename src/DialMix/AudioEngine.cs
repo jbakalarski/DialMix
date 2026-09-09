@@ -1,7 +1,10 @@
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Diagnostics;
+using System.IO;
 
 namespace DialMix;
 
@@ -63,7 +66,7 @@ public sealed class WindowsAudioEngine : IAudioEngine
                 var pid = (int)session.GetProcessID;
                 string name;
                 try { name = Process.GetProcessById(pid).ProcessName; } catch { return null; }
-                return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name);
+                return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name, ReadApplicationIcon(pid));
             }
         }
 
@@ -124,8 +127,25 @@ public sealed class WindowsAudioEngine : IAudioEngine
                     session = _sessionSubscriptions[pid].Session;
                 }
             }
-            yield return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name);
+            yield return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name, ReadApplicationIcon(pid));
         }
+    }
+
+    private static string? ReadApplicationIcon(int pid)
+    {
+        try
+        {
+            var process = Process.GetProcessById(pid);
+            var executable = process.MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(executable)) return null;
+            using var icon = Icon.ExtractAssociatedIcon(executable);
+            using var bitmap = icon?.ToBitmap();
+            if (bitmap is null) return null;
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, ImageFormat.Png);
+            return $"data:image/png;base64,{Convert.ToBase64String(stream.ToArray())}";
+        }
+        catch { return null; }
     }
 
     private bool TryEndpoint(string id, out MMDevice endpoint) { endpoint = _enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active).FirstOrDefault(x => x.ID.Equals(id, StringComparison.OrdinalIgnoreCase))!; return endpoint is not null; }
