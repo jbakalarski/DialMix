@@ -2,6 +2,5 @@
   "name": "dialmix",
   "private": true,
   "description": "Packaging tools for the DialMix OpenDeck plugin",
-  "scripts": { "package": "node scripts/package-plugin.js", "test": "node --test scripts/*.test.js" },
-  "dependencies": { "ws": "^8.18.0" }
+  "scripts": { "package": "node scripts/package-plugin.js", "test": "node --test scripts/*.test.js" }
 }
