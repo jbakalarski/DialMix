@@ -43,7 +43,32 @@ public sealed class WindowsAudioEngine : IAudioEngine
         return result;
     }
 
-    public AudioTargetInfo? Get(string id) => EnumerateTargets().FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    public AudioTargetInfo? Get(string id)
+    {
+        if (id.Equals("system", StringComparison.OrdinalIgnoreCase))
+        {
+            using var endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            return ReadEndpoint(id, endpoint) with { Name = "System volume", Type = TargetType.System };
+        }
+
+        if (TryEndpoint(id, out var device))
+        {
+            using (device) return ReadEndpoint(id, device);
+        }
+
+        if (TrySession(id, out var session))
+        {
+            using (session)
+            {
+                var pid = (int)session.GetProcessID;
+                string name;
+                try { name = Process.GetProcessById(pid).ProcessName; } catch { return null; }
+                return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name);
+            }
+        }
+
+        return null;
+    }
 
     public void SetVolume(string id, float volume)
     {

@@ -1,1 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+	<title>DialMix</title>
+	<style>
+		body{margin:0;background:#101217;color:#eef1f7;font:15px system-ui}
+		main{max-width:920px;margin:0 auto;padding:36px 22px}
+		h1{font-size:32px;margin:0}.sub{color:#8d96a8;margin:6px 0 28px}
+		.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+		.card{background:#1a1e27;border:1px solid #2d3442;border-radius:14px;padding:18px}
+		.name{font-size:17px;font-weight:650}.type{color:#8993a6;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+		.volume{font-size:36px;margin:18px 0 8px}.bar{height:7px;background:#303746;border-radius:6px;overflow:hidden}
+		.fill{height:100%;background:#6d8cff;transition:width 80ms linear}.mute{color:#ff8b9e}
+		.refresh{float:right;background:#29334e;color:white;border:0;padding:8px 13px;border-radius:8px;cursor:pointer}
+		.status{color:#8d96a8;min-height:20px;margin-bottom:12px}
+	</style>
+</head>
+<body>
+	<main>
+		<button class="refresh" onclick="load()">Refresh</button>
+		<h1>DialMix</h1>
+		<div class="sub">Windows Core Audio control center</div>
+		<div class="status" id="status"></div>
+		<section class="grid" id="targets"></section>
+	</main>
+	<script>
+		const targets = document.querySelector('#targets');
+		const status = document.querySelector('#status');
+		const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+		const percent = value => Math.round(Math.max(0, Math.min(1, Number(value) || 0)) * 100);
+		function card(target) {
+			const value = percent(target.volume);
+			return `<article class="card" data-target="${escapeHtml(target.id)}"><div class="type">${escapeHtml(target.type)}</div><div class="name">${escapeHtml(target.name)}</div><div class="volume ${target.muted ? 'mute' : ''}">${target.muted ? 'Muted' : value + '%'}</div><div class="bar"><div class="fill" style="width:${value}%"></div></div></article>`;
+		}
+		function updateCard(id, volume, muted) {
+			const card = [...targets.querySelectorAll('.card')].find(item => item.dataset.target === id);
+			if (!card) return;
+			const value = Math.round(Math.max(0, Math.min(100, Number(volume) || 0)));
+			const label = card.querySelector('.volume');
+			label.textContent = muted ? 'Muted' : value + '%';
+			label.classList.toggle('mute', muted);
+			card.querySelector('.fill').style.width = value + '%';
+		}
+		async function load() {
+			try {
+				const response = await fetch('/api/audio/targets', {cache:'no-store'});
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				targets.innerHTML = (await response.json()).map(card).join('');
+				status.textContent = '';
+			} catch (error) { status.textContent = 'Audio service unavailable'; console.error(error); }
+		}
+		function connectEvents() {
+			const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/events`);
+			socket.onmessage = event => { try { const change = JSON.parse(event.data); if (change.event === 'volume_changed') updateCard(change.target, change.volume, change.muted); } catch (error) { console.error(error); } };
+			socket.onclose = () => setTimeout(connectEvents, 1000);
+		}
+		load();
+		connectEvents();
+	</script>
+</body>
+</html>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DialMix</title><style>body{margin:0;background:#101217;color:#eef1f7;font:15px system-ui}main{max-width:920px;margin:0 auto;padding:36px 22px}h1{font-size:32px;margin:0}.sub{color:#8d96a8;margin:6px 0 28px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{background:#1a1e27;border:1px solid #2d3442;border-radius:14px;padding:18px}.name{font-size:17px;font-weight:650}.type{color:#8993a6;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.volume{font-size:36px;margin:18px 0 8px}.bar{height:7px;background:#303746;border-radius:6px;overflow:hidden}.fill{height:100%;background:#6d8cff}.mute{color:#ff8b9e}.refresh{float:right;background:#29334e;color:white;border:0;padding:8px 13px;border-radius:8px;cursor:pointer}</style></head><body><main><button class="refresh" onclick="load()">Refresh</button><h1>DialMix</h1><div class="sub">Windows Core Audio control center</div><section class="grid" id="targets"></section></main><script>async function load(){const xs=await fetch('/api/audio/targets').then(r=>r.json());document.querySelector('#targets').innerHTML=xs.map(x=>`<article class="card"><div class="type">${x.type}</div><div class="name">${x.name}</div><div class="volume ${x.muted?'mute':''}">${x.muted?'Muted':Math.round(x.volume*100)+'%'}</div><div class="bar"><div class="fill" style="width:${x.volume*100}%"></div></div></article>`).join('')}load();setInterval(load,2000)</script></body></html>

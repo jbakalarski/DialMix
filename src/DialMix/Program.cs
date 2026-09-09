@@ -48,7 +48,43 @@ public sealed record MuteRequest(bool Muted);
 public sealed class ChangeHub
 {
     private readonly HashSet<WebSocket> _sockets = [];
+    private readonly Dictionary<WebSocket, SemaphoreSlim> _sendLocks = [];
     private readonly object _gate = new();
-    public void Publish(VolumeChange change) { var payload = JsonSerializer.SerializeToUtf8Bytes(new { @event = "volume_changed", target = change.TargetId, volume = VolumeMath.ToPercent(change.Volume), muted = change.Muted }); lock (_gate) foreach (var socket in _sockets.Where(x => x.State == WebSocketState.Open).ToArray()) _ = socket.SendAsync(payload, WebSocketMessageType.Text, true, CancellationToken.None); }
-    public async Task Subscribe(WebSocket socket, CancellationToken ct) { lock (_gate) _sockets.Add(socket); var buffer = new byte[256]; try { while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested) await socket.ReceiveAsync(buffer, ct); } catch (OperationCanceledException) { } finally { lock (_gate) _sockets.Remove(socket); if (socket.State == WebSocketState.Open) await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "closed", CancellationToken.None); } }
+    public void Publish(VolumeChange change)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new { @event = "volume_changed", target = change.TargetId, volume = VolumeMath.ToPercent(change.Volume), muted = change.Muted });
+        WebSocket[] sockets;
+        lock (_gate) sockets = _sockets.Where(x => x.State == WebSocketState.Open).ToArray();
+        foreach (var socket in sockets) _ = SendAsync(socket, payload);
+    }
+
+    private async Task SendAsync(WebSocket socket, byte[] payload)
+    {
+        SemaphoreSlim? sendLock;
+        lock (_gate) _sendLocks.TryGetValue(socket, out sendLock);
+        if (sendLock is null) return;
+        await sendLock.WaitAsync();
+        try
+        {
+            if (socket.State == WebSocketState.Open) await socket.SendAsync(payload, WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            lock (_gate) _sockets.Remove(socket);
+        }
+        finally { sendLock.Release(); }
+    }
+
+    public async Task Subscribe(WebSocket socket, CancellationToken ct)
+    {
+        lock (_gate) { _sockets.Add(socket); _sendLocks[socket] = new SemaphoreSlim(1, 1); }
+        var buffer = new byte[256];
+        try { while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested) await socket.ReceiveAsync(buffer, ct); }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            lock (_gate) { _sockets.Remove(socket); _sendLocks.Remove(socket); }
+            if (socket.State == WebSocketState.Open) await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "closed", CancellationToken.None);
+        }
+    }
 }
