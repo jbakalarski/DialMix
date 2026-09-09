@@ -17,6 +17,10 @@ The action property inspector controls the information rendered on the Stream De
 
 Action settings are persisted by the OpenDeck host. The selected target stores its current ID together with its name and type; if Windows exposes a changed device or session ID after restart, DialMix falls back to matching the saved name and type.
 
+## Update notifications
+
+The plugin checks the latest non-draft release at `github.com/jbakalarski/DialMix` once when it connects to OpenDeck. If a newer version than the version in `manifest.json` is available, the property inspector shows a link to the GitHub release. Installing the downloaded `.streamDeckPlugin` package remains a manual OpenDeck operation.
+
 - icon for the selected target type;
 - source name;
 - current volume percentage, or `MUTED` when the target is muted;

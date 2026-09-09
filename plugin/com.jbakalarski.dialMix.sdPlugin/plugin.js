@@ -1,10 +1,13 @@
 const WebSocket = globalThis.WebSocket;
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const { spawn } = require('child_process');
 
 const API_PORT = 17842;
+const RELEASES_URL = 'https://api.github.com/repos/jbakalarski/DialMix/releases/latest';
+const PLUGIN_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8')).Version;
 const DEFAULTS = {
   targetId: 'system', targetMatchName: 'System volume', targetType: 'System', targetName: '', step: 5, pressAction: 'toggleMute',
   showIcon: true, showSource: true, showVolume: true, showBar: true,
@@ -45,6 +48,8 @@ let host = null;
 const contexts = new Map();
 const pendingRotations = new Map();
 let servicePromise = null;
+let updateInfo = null;
+let updateCheckPromise = null;
 const logFile = path.join(__dirname, 'logs', 'dialmix.log');
 
 function log(message, error) {
@@ -67,6 +72,33 @@ const api = (requestPath, options = {}) => new Promise((resolve, reject) => {
   if (options.body) request.write(options.body);
   request.end();
 });
+
+function versionParts(value) { return String(value || '').replace(/^v/i, '').split('.').map(part => Number.parseInt(part, 10) || 0); }
+function isNewerVersion(candidate, current) { const left = versionParts(candidate); const right = versionParts(current); for (let index = 0; index < 3; index += 1) { if ((left[index] || 0) !== (right[index] || 0)) return (left[index] || 0) > (right[index] || 0); } return false; }
+function notifyUpdateInfo() { for (const context of contexts.keys()) send('sendToPropertyInspector', context, { update: updateInfo }); }
+function checkForUpdate() {
+  if (updateCheckPromise) return updateCheckPromise;
+  updateCheckPromise = new Promise(resolve => {
+    const request = https.get(RELEASES_URL, { headers: { 'User-Agent': 'DialMix-update-check', Accept: 'application/vnd.github+json' } }, response => {
+      let body = '';
+      response.on('data', chunk => body += chunk);
+      response.on('end', () => {
+        try {
+          if (response.statusCode !== 200) throw new Error(`GitHub returned HTTP ${response.statusCode}`);
+          const release = JSON.parse(body);
+          const version = String(release.tag_name || release.name || '').replace(/^v/i, '');
+          updateInfo = isNewerVersion(version, PLUGIN_VERSION) ? { available: true, version, url: release.html_url } : { available: false };
+          log(updateInfo.available ? `A newer DialMix release is available: ${version}.` : `DialMix is up to date (${PLUGIN_VERSION}).`);
+        } catch (error) { log('Unable to check for DialMix updates.', error); }
+        resolve(updateInfo);
+        notifyUpdateInfo();
+      });
+    });
+    request.on('error', error => { log('Unable to check for DialMix updates.', error); resolve(null); });
+    request.setTimeout(5000, () => request.destroy(new Error('GitHub update check timed out')));
+  });
+  return updateCheckPromise;
+}
 
 function startService() { const executable = path.join(__dirname, 'service', 'DialMix.exe'); if (!fs.existsSync(executable)) throw new Error(`DialMix service executable is missing: ${executable}`); const child = spawn(executable, [], { cwd: path.dirname(executable), detached: true, windowsHide: true, stdio: 'ignore' }); child.on('error', error => log('Failed to start DialMix service.', error)); child.on('exit', (code, signal) => { if (code !== 0) log(`DialMix service exited with code ${code} and signal ${signal || 'none'}.`); }); child.unref(); log(`Started DialMix service from ${path.dirname(executable)}.`); }
 async function ensureService() { if (servicePromise) return servicePromise; servicePromise = (async () => { try { await api('/api/health'); log('DialMix service is already running.'); return; } catch (error) { log('DialMix service is unavailable; starting it.', error); startService(); } for (let attempt = 0; attempt < 20; attempt += 1) { try { await api('/api/health'); log('DialMix service became available.'); return; } catch { await new Promise(resolve => setTimeout(resolve, 250)); } } throw new Error('DialMix service did not become available'); })(); try { return await servicePromise; } catch (error) { servicePromise = null; throw error; } }
@@ -103,7 +135,7 @@ async function change(context, rawSettings, direction, ticks = 1) {
     if (pending.ticks === 0) pendingRotations.delete(context);
   }
 }
-async function sendInspectorData(context) { try { await ensureService(); const targets = await api('/api/audio/targets'); log(`Loaded ${targets.length} audio targets for the property inspector.`); send('sendToPropertyInspector', context, { targets, settings: contexts.get(context)?.settings || DEFAULTS }); } catch (error) { log('Unable to load DialMix targets.', error); } }
+async function sendInspectorData(context) { try { await ensureService(); const targets = await api('/api/audio/targets'); log(`Loaded ${targets.length} audio targets for the property inspector.`); send('sendToPropertyInspector', context, { targets, settings: contexts.get(context)?.settings || DEFAULTS, update: updateInfo }); } catch (error) { log('Unable to load DialMix targets.', error); } }
 function handleHostMessage(raw) {
   try {
     const message = raw?.data ?? raw;
@@ -144,6 +176,6 @@ function handleHostMessage(raw) {
     }
   } catch (error) { log('Unable to process an OpenDeck message.', error); }
 }
-function connect() { const url = `ws://127.0.0.1:${port}`; log(`Connecting to OpenDeck at ${url}.`); host = new WebSocket(url); const register = () => { log(`Registering plugin ${PLUGIN_UUID}.`); host.send(JSON.stringify({ event: 'registerPlugin', uuid: PLUGIN_UUID })); ensureService().catch(error => log('Unable to start the DialMix service during plugin startup.', error)); }; if (typeof host.addEventListener === 'function') { host.addEventListener('open', register); host.addEventListener('message', event => handleHostMessage(event.data)); host.addEventListener('error', error => log('OpenDeck WebSocket error.', error)); host.addEventListener('close', () => log('OpenDeck WebSocket closed.')); } else { host.on('open', register); host.on('message', handleHostMessage); host.on('error', error => log('OpenDeck WebSocket error.', error)); host.on('close', () => log('OpenDeck WebSocket closed.')); } }
+function connect() { const url = `ws://127.0.0.1:${port}`; log(`Connecting to OpenDeck at ${url}.`); host = new WebSocket(url); const register = () => { log(`Registering plugin ${PLUGIN_UUID}.`); host.send(JSON.stringify({ event: 'registerPlugin', uuid: PLUGIN_UUID })); checkForUpdate(); ensureService().catch(error => log('Unable to start the DialMix service during plugin startup.', error)); }; if (typeof host.addEventListener === 'function') { host.addEventListener('open', register); host.addEventListener('message', event => handleHostMessage(event.data)); host.addEventListener('error', error => log('OpenDeck WebSocket error.', error)); host.addEventListener('close', () => log('OpenDeck WebSocket closed.')); } else { host.on('open', register); host.on('message', handleHostMessage); host.on('error', error => log('OpenDeck WebSocket error.', error)); host.on('close', () => log('OpenDeck WebSocket closed.')); } }
 if (!WebSocket) throw new Error('DialMix requires a plugin host with WebSocket support');
 connect();

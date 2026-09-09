@@ -10,6 +10,7 @@ DialMix is an open-source OpenDeck plugin for controlling Windows Core Audio ses
 - Local REST API and WebSocket change events
 - Versioned JSON configuration with atomic saves
 - Standard Stream Deck package for OpenDeck-compatible hosts
+- GitHub release update notifications in the property inspector
 
 ## Build and install
 
