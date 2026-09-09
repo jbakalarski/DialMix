@@ -22,6 +22,8 @@
   <label for="target">Audio target</label>
   <select id="target"></select>
   <div id="targetStatus" role="status">Loading audio targets…</div>
+  <label for="targetName">Custom target name (optional)</label>
+  <input id="targetName" type="text" maxlength="80" placeholder="Use the audio target name">
   <label for="step">Step (%)</label>
   <input id="step" type="number" min="1" max="100" value="5">
   <label for="press">Press action</label>
@@ -29,6 +31,8 @@
   <fieldset><legend>Displayed elements</legend>
     <label class="check"><input id="showIcon" type="checkbox" checked> Icon</label>
     <label class="check"><input id="autoApplicationIcon" type="checkbox" checked> Automatically load application icon</label>
+    <label for="iconFile">Choose custom icon file</label>
+    <input id="iconFile" type="file" accept=".svg,.png,image/svg+xml,image/png">
     <label for="customIcon">Custom icon (SVG or data URL, optional)</label>
     <textarea id="customIcon" placeholder="Paste an SVG or data:image/... URL"></textarea>
     <label class="check"><input id="showSource" type="checkbox" checked> Source name</label>
@@ -45,19 +49,20 @@
     <label>Background <span class="color"><input id="backgroundColor" type="text" value="#000000"><input id="backgroundColorPicker" type="color" value="#000000"></span></label>
   </fieldset>
   <script>
-    const defaults = { targetId:'system', step:5, pressAction:'toggleMute', showIcon:true, autoApplicationIcon:true, customIcon:'', showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
+    const defaults = { targetId:'system', targetName:'', step:5, pressAction:'toggleMute', showIcon:true, autoApplicationIcon:true, customIcon:'', showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
     let socket = null;
     let context = null;
     let action = 'com.dialmix.audio.control';
     let selectedTargetId = defaults.targetId;
     const target = document.querySelector('#target');
     const targetStatus = document.querySelector('#targetStatus');
-    const fields = ['target','step','press','showIcon','autoApplicationIcon','customIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
+    const fields = ['target','targetName','step','press','showIcon','autoApplicationIcon','customIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
     const value = id => document.querySelector(`#${id}`);
     function setColor(id, color) { value(id).value = color; value(`${id}Picker`).value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#FFFFFF'; }
-    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; selectedTargetId = s.targetId || defaults.targetId; if ([...target.options].some(option => option.value === selectedTargetId)) target.value = selectedTargetId; value('step').value = s.step; value('press').value = s.pressAction; value('customIcon').value = s.customIcon || ''; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
-    function currentSettings() { const s = { targetId:target.value || selectedTargetId, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value, customIcon:value('customIcon').value.trim() }; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
-    function save() { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
+    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; selectedTargetId = s.targetId || defaults.targetId; if ([...target.options].some(option => option.value === selectedTargetId)) target.value = selectedTargetId; value('targetName').value = s.targetName || ''; value('step').value = s.step; value('press').value = s.pressAction; value('customIcon').value = s.customIcon || ''; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
+    function currentSettings() { const s = { targetId:target.value || selectedTargetId, targetName:value('targetName').value.trim(), step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value, customIcon:value('customIcon').value.trim() }; ['showIcon','autoApplicationIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
+    function save() { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event:'sendToPlugin', action, context, payload:currentSettings() })); }
+    function readIconFile(file) { return new Promise((resolve, reject) => { if (!['image/svg+xml', 'image/png'].includes(file.type) && !/\.(svg|png)$/i.test(file.name)) { reject(new Error('Choose an SVG or PNG file.')); return; } const reader = new FileReader(); reader.addEventListener('load', () => resolve(String(reader.result || ''))); reader.addEventListener('error', () => reject(new Error('Unable to read the icon file.'))); reader.readAsDataURL(file); }); }
     function applyTargets(targets) { const selected = target.value || selectedTargetId; target.replaceChildren(); (targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); if ([...target.options].some(option => option.value === selected)) target.value = selected; }
     function showTargetStatus(message, isError = false) { targetStatus.textContent = message; targetStatus.classList.toggle('error', isError); }
     async function loadTargets() { showTargetStatus('Loading audio targets…'); for (let attempt = 0; attempt < 20; attempt += 1) { try { const response = await fetch('http://127.0.0.1:17842/api/audio/targets'); if (!response.ok) throw new Error(`HTTP ${response.status}`); const targets = await response.json(); applyTargets(targets); showTargetStatus(`${targets.length} audio targets available.`); return; } catch (error) { if (attempt === 19) { showTargetStatus(`Unable to load audio targets: ${error.message}`, true); return; } await new Promise(resolve => setTimeout(resolve, 250)); } } }
@@ -79,6 +84,8 @@
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
     loadTargets();
     fields.forEach(id => value(id).addEventListener('change', () => { if (id === 'target') selectedTargetId = target.value; save(); }));
+    value('iconFile').addEventListener('change', async () => { const file = value('iconFile').files[0]; if (!file) return; try { value('customIcon').value = await readIconFile(file); save(); showTargetStatus(`Custom icon loaded: ${file.name}`); } catch (error) { showTargetStatus(error.message, true); } });
+    value('customIcon').addEventListener('input', save);
     ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => value(`${id}Picker`).addEventListener('input', event => { setColor(id, event.target.value); save(); }));
   </script>
 </body>
