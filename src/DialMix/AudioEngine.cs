@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace DialMix;
 
@@ -20,6 +21,8 @@ public interface IAudioEngine : IDisposable
 
 public sealed class WindowsAudioEngine : IAudioEngine
 {
+    private const string ActiveApplicationId = "active-application";
+    private const uint MonitorDefaultToNearest = 2;
     private readonly MMDeviceEnumerator _enumerator = new();
     private readonly Dictionary<string, AudioTargetInfo> _known = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, (AudioSessionControl Session, IAudioSessionEventsHandler Handler)> _sessionSubscriptions = [];
@@ -42,6 +45,7 @@ public sealed class WindowsAudioEngine : IAudioEngine
         foreach (var endpoint in _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
             result.Add(ReadEndpoint(endpoint.ID, endpoint));
         foreach (var session in Sessions()) result.Add(session);
+        result.Add(GetActiveApplicationTarget());
         lock (_sync) { _known.Clear(); foreach (var item in result) _known[item.Id] = item; }
         return result;
     }
@@ -53,6 +57,8 @@ public sealed class WindowsAudioEngine : IAudioEngine
             using var endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             return ReadEndpoint(id, endpoint) with { Name = "System volume", Type = TargetType.System };
         }
+
+        if (id.Equals(ActiveApplicationId, StringComparison.OrdinalIgnoreCase)) return GetActiveApplicationTarget();
 
         if (TryEndpoint(id, out var device))
         {
@@ -149,7 +155,81 @@ public sealed class WindowsAudioEngine : IAudioEngine
     }
 
     private bool TryEndpoint(string id, out MMDevice endpoint) { endpoint = _enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active).FirstOrDefault(x => x.ID.Equals(id, StringComparison.OrdinalIgnoreCase))!; return endpoint is not null; }
-    private bool TrySession(string id, out AudioSessionControl session) { session = null!; if (!id.StartsWith("app:", StringComparison.OrdinalIgnoreCase) || !int.TryParse(id[4..], out var pid)) return false; using var endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia); var sessions = endpoint.AudioSessionManager.Sessions; for (var i = 0; i < sessions.Count; i++) if (sessions[i].GetProcessID == pid) { session = sessions[i]; return true; } return false; }
+    private bool TrySession(string id, out AudioSessionControl session)
+    {
+        session = null!;
+        var pid = id.Equals(ActiveApplicationId, StringComparison.OrdinalIgnoreCase)
+            ? GetFullscreenProcessId()
+            : id.StartsWith("app:", StringComparison.OrdinalIgnoreCase) && int.TryParse(id[4..], out var parsedPid) ? parsedPid : 0;
+        if (pid == 0) return false;
+        return TrySession(pid, out session);
+    }
+
+    private bool TrySession(int pid, out AudioSessionControl session)
+    {
+        session = null!;
+        using var endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        var sessions = endpoint.AudioSessionManager.Sessions;
+        for (var i = 0; i < sessions.Count; i++)
+            if (sessions[i].GetProcessID == pid) { session = sessions[i]; return true; }
+        return false;
+    }
+
+    private AudioTargetInfo GetActiveApplicationTarget()
+    {
+        var pid = GetFullscreenProcessId();
+        if (pid == 0 || !TrySession(pid, out var session))
+            return new AudioTargetInfo(ActiveApplicationId, "Current full-screen application", TargetType.ActiveApplication, 0, false, false);
+
+        using (session)
+        {
+            try
+            {
+                var name = Process.GetProcessById(pid).ProcessName;
+                return new AudioTargetInfo(ActiveApplicationId, name, TargetType.ActiveApplication, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name, ReadApplicationIcon(pid));
+            }
+            catch { return new AudioTargetInfo(ActiveApplicationId, "Current full-screen application", TargetType.ActiveApplication, 0, false, false); }
+        }
+    }
+
+    private static int GetFullscreenProcessId()
+    {
+        var window = GetForegroundWindow();
+        if (window == nint.Zero || !IsFullscreen(window)) return 0;
+        _ = GetWindowThreadProcessId(window, out var processId);
+        return (int)processId;
+    }
+
+    private static bool IsFullscreen(nint window)
+    {
+        if (!GetWindowRect(window, out var windowRect)) return false;
+        var monitor = MonitorFromWindow(window, MonitorDefaultToNearest);
+        if (monitor == nint.Zero) return false;
+        var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        return GetMonitorInfo(monitor, ref monitorInfo) && windowRect.Left == monitorInfo.Monitor.Left && windowRect.Top == monitorInfo.Monitor.Top && windowRect.Right == monitorInfo.Monitor.Right && windowRect.Bottom == monitorInfo.Monitor.Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(nint window, out WindowRect rect);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint window, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowRect { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MonitorInfo { public int Size; public WindowRect Monitor; public WindowRect Work; public uint Flags; }
+
     private void Publish(string id, float volume, bool muted) => Changed?.Invoke(this, new VolumeChange(id, volume, muted));
     public void Dispose() { foreach (var pair in _sessionSubscriptions.Values) { pair.Session.UnRegisterEventClient(pair.Handler); pair.Session.Dispose(); } _sessionSubscriptions.Clear(); _enumerator.Dispose(); }
     private sealed class SessionEvents(int pid, WindowsAudioEngine owner) : IAudioSessionEventsHandler
