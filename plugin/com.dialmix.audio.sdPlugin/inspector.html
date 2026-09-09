@@ -39,19 +39,32 @@
   </fieldset>
   <script>
     const defaults = { targetId:'system', step:5, pressAction:'toggleMute', showIcon:true, showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
-    const query = new URLSearchParams(location.search);
-    const context = query.get('context');
-    const action = query.get('action') || 'com.dialmix.audio.control';
-    const socket = new WebSocket(`ws://${query.get('port') || location.host}`);
+    let socket = null;
+    let context = null;
+    let action = 'com.dialmix.audio.control';
     const target = document.querySelector('#target');
     const fields = ['step','press','showIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
     const value = id => document.querySelector(`#${id}`);
     function setColor(id, color) { value(id).value = color; value(`${id}Picker`).value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#FFFFFF'; }
     function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; target.value = s.targetId || defaults.targetId; value('step').value = s.step; value('press').value = s.pressAction; ['showIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
     function currentSettings() { const s = { targetId:target.value, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value }; ['showIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
-    function save() { socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
-    socket.onopen = () => socket.send(JSON.stringify({ event:'getSettings', action, context }));
-    socket.onmessage = event => { const message = JSON.parse(event.data); if (message.event === 'didReceiveSettings') applySettings(message.payload.settings); if (message.event === 'sendToPropertyInspector') { const data = message.payload || {}; (data.targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); applySettings(data.settings); } };
+    function save() { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
+    function applyTargets(targets) { target.replaceChildren(); (targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); }
+    function handleMessage(event) { const message = JSON.parse(event.data); if (message.event === 'didReceiveSettings') applySettings(message.payload?.settings); if (message.event === 'sendToPropertyInspector') { const data = message.payload || {}; applyTargets(data.targets); applySettings(data.settings); } }
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const actionInfo = typeof inActionInfo === 'string' ? JSON.parse(inActionInfo) : (inActionInfo || {});
+      context = actionInfo.context || context;
+      action = actionInfo.action || action;
+      applySettings(actionInfo.payload?.settings);
+      socket = new WebSocket(`ws://127.0.0.1:${inPort}`);
+      socket.addEventListener('open', () => {
+        socket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+        socket.send(JSON.stringify({ event:'getSettings', action, context }));
+      });
+      socket.addEventListener('message', handleMessage);
+    }
+    window.connectOpenActionSocket = connectElgatoStreamDeckSocket;
+    window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
     fields.forEach(id => value(id).addEventListener('change', save));
     ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => value(`${id}Picker`).addEventListener('input', event => { setColor(id, event.target.value); save(); }));
   </script>
