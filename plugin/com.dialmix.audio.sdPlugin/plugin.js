@@ -37,7 +37,7 @@ const api = (requestPath, options = {}) => new Promise((resolve, reject) => {
   request.end();
 });
 
-function startService() { const executable = path.join(__dirname, 'service', 'DialMix.exe'); if (fs.existsSync(executable)) spawn(executable, [], { detached: true, windowsHide: true, stdio: 'ignore' }).unref(); }
+function startService() { const executable = path.join(__dirname, 'service', 'DialMix.exe'); if (fs.existsSync(executable)) spawn(executable, [], { cwd: path.dirname(executable), detached: true, windowsHide: true, stdio: 'ignore' }).unref(); }
 async function ensureService() { try { await api('/api/health'); return; } catch { startService(); } for (let attempt = 0; attempt < 20; attempt += 1) { try { await api('/api/health'); return; } catch { await new Promise(resolve => setTimeout(resolve, 250)); } } throw new Error('DialMix service did not become available'); }
 function color(value, fallback) { return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toUpperCase() : fallback; }
 function settings(value = {}) { return { ...DEFAULTS, ...value, step: Math.max(1, Math.min(100, Number(value.step) || DEFAULTS.step)), iconColor: color(value.iconColor, DEFAULTS.iconColor), sourceColor: color(value.sourceColor, DEFAULTS.sourceColor), volumeColor: color(value.volumeColor, DEFAULTS.volumeColor), barColor: color(value.barColor, DEFAULTS.barColor), barBackgroundColor: color(value.barBackgroundColor, DEFAULTS.barBackgroundColor), barBorderColor: color(value.barBorderColor, DEFAULTS.barBorderColor), backgroundColor: color(value.backgroundColor, DEFAULTS.backgroundColor) }; }
