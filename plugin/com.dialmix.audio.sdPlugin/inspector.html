@@ -13,11 +13,14 @@
     .check input { accent-color: #fff; }
     .color { display: grid; grid-template-columns: 1fr 72px; gap: 8px; align-items: center; }
     input[type=color] { width: 100%; height: 30px; padding: 1px; background: #333; border: 1px solid #555; border-radius: 4px; }
+    #targetStatus { min-height: 18px; margin-top: 5px; color: #aaa; font-size: 12px; }
+    #targetStatus.error { color: #ff9a9a; }
   </style>
 </head>
 <body>
   <label for="target">Audio target</label>
   <select id="target"></select>
+  <div id="targetStatus" role="status">Loading audio targets…</div>
   <label for="step">Step (%)</label>
   <input id="step" type="number" min="1" max="100" value="5">
   <label for="press">Press action</label>
@@ -42,14 +45,18 @@
     let socket = null;
     let context = null;
     let action = 'com.dialmix.audio.control';
+    let selectedTargetId = defaults.targetId;
     const target = document.querySelector('#target');
-    const fields = ['step','press','showIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
+    const targetStatus = document.querySelector('#targetStatus');
+    const fields = ['target','step','press','showIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
     const value = id => document.querySelector(`#${id}`);
     function setColor(id, color) { value(id).value = color; value(`${id}Picker`).value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#FFFFFF'; }
-    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; target.value = s.targetId || defaults.targetId; value('step').value = s.step; value('press').value = s.pressAction; ['showIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
-    function currentSettings() { const s = { targetId:target.value, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value }; ['showIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
+    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; selectedTargetId = s.targetId || defaults.targetId; if ([...target.options].some(option => option.value === selectedTargetId)) target.value = selectedTargetId; value('step').value = s.step; value('press').value = s.pressAction; ['showIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
+    function currentSettings() { const s = { targetId:target.value || selectedTargetId, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value }; ['showIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
     function save() { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
-    function applyTargets(targets) { target.replaceChildren(); (targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); }
+    function applyTargets(targets) { const selected = target.value || selectedTargetId; target.replaceChildren(); (targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); if ([...target.options].some(option => option.value === selected)) target.value = selected; }
+    function showTargetStatus(message, isError = false) { targetStatus.textContent = message; targetStatus.classList.toggle('error', isError); }
+    async function loadTargets() { showTargetStatus('Loading audio targets…'); for (let attempt = 0; attempt < 20; attempt += 1) { try { const response = await fetch('http://127.0.0.1:17842/api/audio/targets'); if (!response.ok) throw new Error(`HTTP ${response.status}`); const targets = await response.json(); applyTargets(targets); showTargetStatus(`${targets.length} audio targets available.`); return; } catch (error) { if (attempt === 19) { showTargetStatus(`Unable to load audio targets: ${error.message}`, true); return; } await new Promise(resolve => setTimeout(resolve, 250)); } } }
     function handleMessage(event) { const message = JSON.parse(event.data); if (message.event === 'didReceiveSettings') applySettings(message.payload?.settings); if (message.event === 'sendToPropertyInspector') { const data = message.payload || {}; applyTargets(data.targets); applySettings(data.settings); } }
     function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
       const actionInfo = typeof inActionInfo === 'string' ? JSON.parse(inActionInfo) : (inActionInfo || {});
@@ -60,12 +67,14 @@
       socket.addEventListener('open', () => {
         socket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
         socket.send(JSON.stringify({ event:'getSettings', action, context }));
+        loadTargets();
       });
       socket.addEventListener('message', handleMessage);
     }
     window.connectOpenActionSocket = connectElgatoStreamDeckSocket;
     window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
-    fields.forEach(id => value(id).addEventListener('change', save));
+    loadTargets();
+    fields.forEach(id => value(id).addEventListener('change', () => { if (id === 'target') selectedTargetId = target.value; save(); }));
     ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => value(`${id}Picker`).addEventListener('input', event => { setColor(id, event.target.value); save(); }));
   </script>
 </body>

@@ -11,3 +11,5 @@ npm run package
 ```
 
 Run the service with `dotnet run --project src/DialMix`. Open `http://127.0.0.1:17842` for the dashboard. Install `dist/DialMix.streamDeckPlugin` through OpenDeck's plugin manager.
+
+`npm run package` publishes the current Release build of the DialMix service before creating the plugin archive. This keeps the bundled API and property inspector in sync.

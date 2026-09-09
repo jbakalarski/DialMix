@@ -4,11 +4,13 @@ const { execFileSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const source = path.join(root, 'plugin', 'com.dialmix.audio.sdPlugin');
 const dist = path.join(root, 'dist');
+const service = path.join(root, 'artifacts', 'DialMix');
+const serviceProject = path.join(root, 'src', 'DialMix', 'DialMix.csproj');
+execFileSync('dotnet', ['publish', serviceProject, '-c', 'Release', '-o', service, '-p:NuGetAudit=false'], { stdio: 'inherit' });
 fs.rmSync(dist, { recursive: true, force: true }); fs.mkdirSync(dist, { recursive: true });
 const staging = path.join(dist, 'com.dialmix.audio.sdPlugin');
 fs.cpSync(source, staging, { recursive: true });
-const service = path.join(root, 'artifacts', 'DialMix');
-if (fs.existsSync(service)) fs.cpSync(service, path.join(staging, 'service'), { recursive: true });
+fs.cpSync(service, path.join(staging, 'service'), { recursive: true });
 if (process.platform === 'win32') {
   const archive = path.join(dist, 'DialMix.streamDeckPlugin');
   const quote = value => `'${value.replaceAll("'", "''")}'`;
