@@ -19,7 +19,18 @@ const icons = {
   InputDevice: fs.readFileSync(path.join(__dirname, 'images', 'targets', 'microphone.svg'), 'utf8'),
   default: fs.readFileSync(path.join(__dirname, 'images', 'targets', 'volume.svg'), 'utf8')
 };
-let port = Number(process.argv[2]);
+function readHostPort(args) {
+  for (let index = 2; index < args.length; index += 1) {
+    const argument = String(args[index]);
+    if (/^-{1,2}port$/i.test(argument)) return Number(args[index + 1]);
+    const inline = argument.match(/^-{1,2}port=(\d+)$/i);
+    if (inline) return Number(inline[1]);
+  }
+  const positional = args.slice(2).find(argument => /^\d+$/.test(String(argument)));
+  return positional === undefined ? NaN : Number(positional);
+}
+const port = readHostPort(process.argv);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DialMix requires a valid OpenDeck WebSocket port argument (-port <number>)');
 let host = null;
 const contexts = new Map();
 
