@@ -22,7 +22,18 @@ jobs:
       - name: Verify package
         shell: pwsh
         run: |
-          if (-not (Test-Path dist/DialMix.streamDeckPlugin)) { throw 'DialMix.streamDeckPlugin was not generated' }
+          $packagePath = Join-Path $PWD 'dist/DialMix.streamDeckPlugin'
+          if (-not (Test-Path -LiteralPath $packagePath)) { throw 'DialMix.streamDeckPlugin was not generated' }
+          $extractPath = Join-Path $env:RUNNER_TEMP 'dialmix-plugin-validation'
+          Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $packagePath -DestinationPath $extractPath -Force
+          $manifestPath = Join-Path $extractPath 'com.dialmix.audio.sdPlugin/manifest.json'
+          if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'Plugin manifest is missing from the archive' }
+          $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+          if (-not $manifest.UUID) { throw 'Plugin manifest UUID is missing' }
+          if (-not $manifest.Nodejs.Version) { throw 'Plugin manifest Nodejs.Version is missing' }
+          if (-not $manifest.Actions[0].States) { throw 'Plugin action States are missing' }
+          Remove-Item -LiteralPath $extractPath -Recurse -Force
       - name: Generate release notes
         shell: pwsh
         run: |

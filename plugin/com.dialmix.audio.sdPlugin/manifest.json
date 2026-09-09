@@ -1,4 +1,5 @@
 {
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Author": "DialMix contributors",
   "CodePath": "plugin.js",
   "Description": "Control Windows Core Audio sessions and devices with OpenDeck encoders.",
@@ -7,12 +8,15 @@
   "SDKVersion": 2,
   "UUID": "com.dialmix.audio",
   "Icon": "images/plugin",
+  "Category": "DialMix",
+  "Nodejs": { "Version": "20" },
   "OS": [ { "Platform": "windows", "MinimumVersion": "10" } ],
   "Actions": [ {
     "Name": "Audio control",
     "UUID": "com.dialmix.audio.control",
     "Tooltip": "Control a Windows audio target",
     "Icon": "images/action",
+    "States": [ { "Image": "images/action", "ShowTitle": true } ],
     "PropertyInspectorPath": "inspector.html",
     "Controllers": [ "Encoder", "Keypad" ],
     "SupportedInMultiActions": true
