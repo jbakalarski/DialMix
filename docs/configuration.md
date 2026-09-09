@@ -15,6 +15,8 @@ Steps are clamped to 1–100 percent. Saving is atomic: DialMix writes a tempora
 
 The action property inspector controls the information rendered on the Stream Deck encoder and key. An optional custom target name replaces the source name shown on the device without changing the underlying Windows audio target:
 
+Action settings are persisted by the OpenDeck host. The selected target stores its current ID together with its name and type; if Windows exposes a changed device or session ID after restart, DialMix falls back to matching the saved name and type.
+
 - icon for the selected target type;
 - source name;
 - current volume percentage, or `MUTED` when the target is muted;
