@@ -37,6 +37,8 @@ Any OpenDeck/Stream Deck-compatible device exposing the standard Encoder or Keyp
 - [Development](docs/development.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
-## License
+## License and attribution
 
-MIT. See [LICENSE](LICENSE).
+DialMix is licensed under the GNU General Public License, version 3.0 (GPL-3.0). See [LICENSE](LICENSE) for the complete license terms.
+
+When distributing a modified version, fork, or derivative work, preserve the original copyright and attribution notices and clearly identify the changes. See [NOTICE](NOTICE) for the required attribution information.
