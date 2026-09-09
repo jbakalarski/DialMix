@@ -5,7 +5,6 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const API_PORT = 17842;
-const PLUGIN_UUID = 'com.dialmix.audio';
 const DEFAULTS = {
   targetId: 'system', step: 5, pressAction: 'toggleMute',
   showIcon: true, showSource: true, showVolume: true, showBar: true,
@@ -29,8 +28,18 @@ function readHostPort(args) {
   const positional = args.slice(2).find(argument => /^\d+$/.test(String(argument)));
   return positional === undefined ? NaN : Number(positional);
 }
+function readHostArgument(args, name) {
+  for (let index = 2; index < args.length; index += 1) {
+    const argument = String(args[index]);
+    if (new RegExp(`^-{1,2}${name}$`, 'i').test(argument)) return String(args[index + 1] || '');
+    const inline = argument.match(new RegExp(`^-{1,2}${name}=(.+)$`, 'i'));
+    if (inline) return inline[1];
+  }
+  return '';
+}
 const port = readHostPort(process.argv);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DialMix requires a valid OpenDeck WebSocket port argument (-port <number>)');
+const PLUGIN_UUID = readHostArgument(process.argv, 'pluginUUID') || 'com.dialmix.audio.sdPlugin';
 let host = null;
 const contexts = new Map();
 let servicePromise = null;
@@ -70,7 +79,7 @@ function render(context, target, rawSettings) { const configured = settings(rawS
 async function update(context, rawSettings) { const configured = settings(rawSettings); try { await ensureService(); const target = await api(`/api/audio/targets/${encodeURIComponent(configured.targetId)}`); if (target) render(context, target, configured); } catch (error) { log(`Unable to update DialMix target ${configured.targetId}.`, error); } }
 async function change(context, rawSettings, direction) { const configured = settings(rawSettings); await api(`/api/audio/targets/${encodeURIComponent(configured.targetId)}/volume/${direction}`, { method: 'POST', body: JSON.stringify({ step: configured.step }) }); await update(context, configured); }
 async function sendInspectorData(context) { try { await ensureService(); const targets = await api('/api/audio/targets'); log(`Loaded ${targets.length} audio targets for the property inspector.`); send('sendToPropertyInspector', context, { targets, settings: contexts.get(context)?.settings || DEFAULTS }); } catch (error) { log('Unable to load DialMix targets.', error); } }
-function handleHostMessage(raw) { const message = raw?.data ?? raw; const event = JSON.parse(typeof message === 'string' ? message : Buffer.from(message).toString('utf8')); const payload = event.payload || {}; if (event.event === 'willAppear') { contexts.set(event.context, { settings: settings(payload.settings), controller: payload.controller }); update(event.context, payload.settings); } if (event.event === 'didReceiveSettings') { const current = contexts.get(event.context) || {}; current.settings = settings(payload.settings); contexts.set(event.context, current); update(event.context, current.settings); } if (event.event === 'propertyInspectorDidAppear' || event.event === 'getSettings') sendInspectorData(event.context); if (event.event === 'sendToPlugin') { const current = contexts.get(event.context) || {}; current.settings = settings(payload); contexts.set(event.context, current); update(event.context, current.settings); } if (event.event === 'dialRotate') { const current = contexts.get(event.context) || {}; const ticks = Number(payload.ticks || payload.delta || 1); change(event.context, current.settings || DEFAULTS, ticks >= 0 ? 'increase' : 'decrease').catch(error => log('Unable to change target volume.', error)); } if (event.event === 'dialDown' || event.event === 'keyDown') { const current = contexts.get(event.context) || {}; const configured = settings(current.settings); if (configured.pressAction === 'toggleMute') api(`/api/audio/targets/${encodeURIComponent(configured.targetId)}/mute/toggle`, { method: 'POST' }).then(() => update(event.context, configured)).catch(error => log('Unable to toggle target mute.', error)); } }
+function handleHostMessage(raw) { const message = raw?.data ?? raw; const event = JSON.parse(typeof message === 'string' ? message : Buffer.from(message).toString('utf8')); const payload = event.payload || {}; if (event.event === 'willAppear') { const configured = settings(payload.settings); log(`Action appeared for ${event.context} with target ${configured.targetId}.`); contexts.set(event.context, { settings: configured, controller: payload.controller }); update(event.context, configured); } if (event.event === 'didReceiveSettings') { const current = contexts.get(event.context) || {}; current.settings = settings(payload.settings); contexts.set(event.context, current); log(`Settings received for ${event.context}: ${current.settings.targetId}.`); update(event.context, current.settings); } if (event.event === 'propertyInspectorDidAppear' || event.event === 'getSettings') sendInspectorData(event.context); if (event.event === 'sendToPlugin') { const current = contexts.get(event.context) || {}; current.settings = settings(payload); contexts.set(event.context, current); update(event.context, current.settings); } if (event.event === 'dialRotate') { const current = contexts.get(event.context) || {}; const ticks = Number(payload.ticks || payload.delta || 1); const configured = settings(current.settings); log(`Adjusting ${configured.targetId} by ${ticks} tick(s).`); change(event.context, configured, ticks >= 0 ? 'increase' : 'decrease').catch(error => log('Unable to change target volume.', error)); } if (event.event === 'dialDown' || event.event === 'keyDown') { const current = contexts.get(event.context) || {}; const configured = settings(current.settings); if (configured.pressAction === 'toggleMute') api(`/api/audio/targets/${encodeURIComponent(configured.targetId)}/mute/toggle`, { method: 'POST' }).then(() => update(event.context, configured)).catch(error => log('Unable to toggle target mute.', error)); } }
 function connect() { const url = `ws://127.0.0.1:${port}`; log(`Connecting to OpenDeck at ${url}.`); host = new WebSocket(url); const register = () => { log(`Registering plugin ${PLUGIN_UUID}.`); host.send(JSON.stringify({ event: 'registerPlugin', uuid: PLUGIN_UUID })); ensureService().catch(error => log('Unable to start the DialMix service during plugin startup.', error)); }; if (typeof host.addEventListener === 'function') { host.addEventListener('open', register); host.addEventListener('message', event => handleHostMessage(event.data)); host.addEventListener('error', error => log('OpenDeck WebSocket error.', error)); host.addEventListener('close', () => log('OpenDeck WebSocket closed.')); } else { host.on('open', register); host.on('message', handleHostMessage); host.on('error', error => log('OpenDeck WebSocket error.', error)); host.on('close', () => log('OpenDeck WebSocket closed.')); } }
 if (!WebSocket) throw new Error('DialMix requires a plugin host with WebSocket support');
 connect();
