@@ -78,10 +78,28 @@ update the relevant documentation.
 
 After **every change made during the current chat**, the AI agent MUST provide a proposed Git commit message in English.
 
-The proposed commit message must include:
+The proposed commit message must be generated as two separate, independently copyable fields:
 
-1. A concise commit title.
-2. A detailed commit description.
+1. `Commit title` — a concise conventional-commit title.
+2. `Commit description` — a detailed bullet list describing the complete related change.
+
+Do not combine the title and description into one code block. Always use this format:
+
+Commit title:
+
+```text
+<type>(<scope>): <short description>
+```
+
+Commit description:
+
+```text
+- <change>
+- <change>
+- <change>
+```
+
+The two fields must be immediately usable by copying them separately into the corresponding Git commit fields.
 
 The commit message MUST take into account:
 
@@ -95,16 +113,6 @@ Do not generate a commit message based only on the most recent file modification
 Before proposing the commit message, inspect the current working tree and determine what changes are currently uncommitted.
 
 Use English for all commit messages.
-
-Preferred format:
-
-```text
-<type>(<scope>): <short description>
-
-- <change>
-- <change>
-- <change>
-```
 
 Use conventional commit types where appropriate:
 
