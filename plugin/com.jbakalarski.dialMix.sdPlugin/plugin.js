@@ -40,7 +40,7 @@ function readHostArgument(args, name) {
 }
 const port = readHostPort(process.argv);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('DialMix requires a valid OpenDeck WebSocket port argument (-port <number>)');
-const PLUGIN_UUID = readHostArgument(process.argv, 'pluginUUID') || 'com.dialmix.audio.sdPlugin';
+const PLUGIN_UUID = readHostArgument(process.argv, 'pluginUUID') || 'com.jbakalarski.dialMix.sdPlugin';
 let host = null;
 const contexts = new Map();
 const pendingRotations = new Map();

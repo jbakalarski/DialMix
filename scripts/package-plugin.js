@@ -2,13 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
-const source = path.join(root, 'plugin', 'com.dialmix.audio.sdPlugin');
+const source = path.join(root, 'plugin', 'com.jbakalarski.dialMix.sdPlugin');
 const dist = path.join(root, 'dist');
 const service = path.join(root, 'artifacts', 'DialMix');
 const serviceProject = path.join(root, 'src', 'DialMix', 'DialMix.csproj');
 execFileSync('dotnet', ['publish', serviceProject, '-c', 'Release', '-o', service, '-p:NuGetAudit=false'], { stdio: 'inherit' });
 fs.rmSync(dist, { recursive: true, force: true }); fs.mkdirSync(dist, { recursive: true });
-const staging = path.join(dist, 'com.dialmix.audio.sdPlugin');
+const staging = path.join(dist, 'com.jbakalarski.dialMix.sdPlugin');
 fs.cpSync(source, staging, { recursive: true });
 fs.cpSync(service, path.join(staging, 'service'), { recursive: true });
 if (process.platform === 'win32') {
@@ -17,6 +17,6 @@ if (process.platform === 'win32') {
   const command = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $source = ${quote(staging)}; $destination = ${quote(archive)}; [System.IO.Compression.ZipFile]::CreateFromDirectory($source, $destination, [System.IO.Compression.CompressionLevel]::Optimal, $true)`;
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' });
 }
-else execFileSync('zip', ['-qr', path.join(dist, 'DialMix.streamDeckPlugin'), 'com.dialmix.audio.sdPlugin'], { cwd: dist });
+else execFileSync('zip', ['-qr', path.join(dist, 'DialMix.streamDeckPlugin'), path.basename(staging)], { cwd: dist });
 if (!fs.existsSync(path.join(dist, 'DialMix.streamDeckPlugin'))) throw new Error('Package was not created');
 console.log(`Created ${path.join('dist', 'DialMix.streamDeckPlugin')}`);
