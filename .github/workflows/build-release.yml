@@ -27,10 +27,38 @@ jobs:
         shell: pwsh
         run: |
           $previous = git describe --tags --abbrev=0 2>$null
-          if (-not $previous) { $previous = (git rev-list --max-parents=0 HEAD) }
-          $changes = git log "$previous..HEAD" --pretty=format:'- %s'
-          if (-not $changes) { $changes = '- Initial DialMix build' }
-          "DialMix Development Build — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))`n`nHighlights:`n$changes" | Out-File release-notes.md -Encoding utf8
+          $logFormat = '%s%x1f%b%x1e'
+          if ($previous) {
+            $rawCommits = @(git log "$previous..HEAD" --pretty=format:$logFormat) -join "`n"
+          } else {
+            $rawCommits = @(git log --pretty=format:$logFormat) -join "`n"
+          }
+
+          $notes = [System.Collections.Generic.List[string]]::new()
+          foreach ($record in ($rawCommits -split [char]0x1e)) {
+            if ([string]::IsNullOrWhiteSpace($record)) { continue }
+            $fields = $record -split [char]0x1f, 2
+            $title = $fields[0].Trim()
+            if ([string]::IsNullOrWhiteSpace($title)) { continue }
+            $notes.Add("- **$title**")
+
+            $description = @()
+            if ($fields.Count -gt 1) {
+              $description = $fields[1].Trim() -split "`r?`n" |
+                Where-Object { $_.Trim() -and $_ -notmatch '^Co-Authored-By:' }
+            }
+            if ($description.Count -eq 0) { $description = @('No additional description provided.') }
+            foreach ($line in $description) { $notes.Add("  - $($line.Trim().TrimStart('-').Trim())") }
+            $notes.Add('')
+          }
+          if ($notes.Count -eq 0) {
+            $notes.Add('- **Initial DialMix build**')
+            $notes.Add('  - No additional description provided.')
+          }
+
+          $date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+          @("# DialMix Development Build — $date", '', '## Changes', '', $notes) |
+            Out-File release-notes.md -Encoding utf8
           "RELEASE_NAME=DialMix Development Build — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - uses: softprops/action-gh-release@v2
         with:
