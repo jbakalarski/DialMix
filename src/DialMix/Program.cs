@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DialMix;
 
@@ -10,12 +11,15 @@ public static class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("DIALMIX_URL") ?? "http://127.0.0.1:17842");
         builder.Logging.AddSimpleConsole(options => options.SingleLine = true);
+        builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton<ConfigurationStore>();
         builder.Services.AddSingleton<IAudioEngine, WindowsAudioEngine>();
         builder.Services.AddSingleton<ChangeHub>();
         var app = builder.Build();
         app.UseDefaultFiles();
         app.UseStaticFiles();
+        app.UseCors();
         var engine = app.Services.GetRequiredService<IAudioEngine>();
         var hub = app.Services.GetRequiredService<ChangeHub>();
         engine.Changed += (_, change) => hub.Publish(change);

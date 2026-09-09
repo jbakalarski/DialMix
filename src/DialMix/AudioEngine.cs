@@ -81,7 +81,7 @@ public sealed class WindowsAudioEngine : IAudioEngine
         var sessions = endpoint.AudioSessionManager.Sessions;
         for (var i = 0; i < sessions.Count; i++)
         {
-            using var session = sessions[i];
+            var session = sessions[i];
             var pid = (int)session.GetProcessID;
             if (pid == 0) continue;
             string name; try { name = Process.GetProcessById(pid).ProcessName; } catch { continue; }
@@ -92,6 +92,11 @@ public sealed class WindowsAudioEngine : IAudioEngine
                     var handler = new SessionEvents(pid, this);
                     session.RegisterEventClient(handler);
                     _sessionSubscriptions[pid] = (session, handler);
+                }
+                else
+                {
+                    session.Dispose();
+                    session = _sessionSubscriptions[pid].Session;
                 }
             }
             yield return new AudioTargetInfo($"app:{pid}", name, TargetType.Application, session.SimpleAudioVolume.Volume, session.SimpleAudioVolume.Mute, true, name);
