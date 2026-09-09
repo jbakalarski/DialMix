@@ -27,7 +27,7 @@ jobs:
           $extractPath = Join-Path $env:RUNNER_TEMP 'dialmix-plugin-validation'
           Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -LiteralPath $packagePath -DestinationPath $extractPath -Force
-          $manifestPath = Join-Path $extractPath 'com.dialmix.audio.sdPlugin/manifest.json'
+          $manifestPath = Join-Path $extractPath 'com.jbakalarski.dialMix.sdPlugin/manifest.json'
           if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'Plugin manifest is missing from the archive' }
           $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
           if (-not $manifest.UUID) { throw 'Plugin manifest UUID is missing' }
