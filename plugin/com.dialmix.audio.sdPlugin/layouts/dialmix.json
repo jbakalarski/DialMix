@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+  "id": "dialmix-audio",
+  "items": [
+    { "key": "icon", "type": "pixmap", "rect": [8, 8, 36, 36] },
+    { "key": "source", "type": "text", "rect": [50, 8, 142, 28], "font": { "size": 16, "weight": 600 }, "alignment": "left", "text-overflow": "ellipsis" },
+    { "key": "volume", "type": "text", "rect": [50, 38, 142, 27], "font": { "size": 23, "weight": 700 }, "alignment": "left" },
+    { "key": "bar", "type": "bar", "rect": [8, 76, 184, 14], "range": { "min": 0, "max": 100 }, "value": 0, "subtype": 4, "border_w": 1 }
+  ]
+}

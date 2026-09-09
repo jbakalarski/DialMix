@@ -17,6 +17,7 @@
     "Tooltip": "Control a Windows audio target",
     "Icon": "images/action",
     "States": [ { "Image": "images/action", "ShowTitle": true } ],
+    "Encoder": { "layout": "layouts/dialmix.json", "TriggerDescription": { "Push": "Toggle mute", "Rotate": "Adjust volume" } },
     "PropertyInspectorPath": "inspector.html",
     "Controllers": [ "Encoder", "Keypad" ],
     "SupportedInMultiActions": true

@@ -1,3 +1,59 @@
-<!doctype html><html><head><meta charset="utf-8"><style>body{font:14px system-ui;color:#eee;background:#252525;padding:14px}label{display:block;margin:10px 0 4px}select,input{width:100%;box-sizing:border-box;padding:7px;background:#333;color:#fff;border:1px solid #555;border-radius:4px}</style></head><body><label>Audio target</label><select id="target"></select><label>Step (%)</label><input id="step" type="number" min="1" max="100" value="5"><label>Press action</label><select id="press"><option value="toggleMute">Toggle mute</option><option value="none">None</option></select><script>
-const qs=new URLSearchParams(location.search);const socket=new WebSocket(`ws://${qs.get('port')||location.host}`);let context=qs.get('context');const target=document.querySelector('#target');const step=document.querySelector('#step');const press=document.querySelector('#press');socket.onopen=()=>socket.send(JSON.stringify({event:'getSettings',context}));socket.onmessage=e=>{const m=JSON.parse(e.data);if(m.event==='sendToPropertyInspector'){for(const x of m.payload.targets||[])target.add(new Option(`${x.type}: ${x.name}`,x.id));}};async function loadTargets(){for(let attempt=0;attempt<20;attempt+=1){try{const response=await fetch('http://127.0.0.1:17842/api/audio/targets');if(!response.ok)throw new Error(`HTTP ${response.status}`);const xs=await response.json();target.replaceChildren(...xs.map(x=>new Option(`${x.type}: ${x.name}`,x.id)));return;}catch(error){if(attempt===19){target.add(new Option('DialMix service unavailable','system'));}else await new Promise(resolve=>setTimeout(resolve,250));}}}loadTargets();function save(){socket.send(JSON.stringify({event:'setSettings',context,payload:{targetId:target.value,step:Number(step.value),pressAction:press.value}}));}target.onchange=save;step.onchange=save;press.onchange=save;
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 13px system-ui, sans-serif; color: #eee; background: #252525; padding: 12px; }
+    label { display: block; margin: 9px 0 4px; color: #bbb; }
+    select, input[type=number], input[type=text] { width: 100%; box-sizing: border-box; padding: 7px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+    fieldset { border: 1px solid #4b4b4b; border-radius: 5px; margin: 14px 0 0; padding: 8px 10px 10px; }
+    legend { color: #ddd; padding: 0 4px; }
+    .check { display: flex; align-items: center; gap: 8px; margin: 7px 0; color: #eee; }
+    .check input { accent-color: #fff; }
+    .color { display: grid; grid-template-columns: 1fr 72px; gap: 8px; align-items: center; }
+    input[type=color] { width: 100%; height: 30px; padding: 1px; background: #333; border: 1px solid #555; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <label for="target">Audio target</label>
+  <select id="target"></select>
+  <label for="step">Step (%)</label>
+  <input id="step" type="number" min="1" max="100" value="5">
+  <label for="press">Press action</label>
+  <select id="press"><option value="toggleMute">Toggle mute</option><option value="none">None</option></select>
+  <fieldset><legend>Displayed elements</legend>
+    <label class="check"><input id="showIcon" type="checkbox" checked> Icon</label>
+    <label class="check"><input id="showSource" type="checkbox" checked> Source name</label>
+    <label class="check"><input id="showVolume" type="checkbox" checked> Volume percentage</label>
+    <label class="check"><input id="showBar" type="checkbox" checked> Volume bar</label>
+  </fieldset>
+  <fieldset><legend>Colors</legend>
+    <label>Icon <span class="color"><input id="iconColor" type="text" value="#FFFFFF"><input id="iconColorPicker" type="color" value="#FFFFFF"></span></label>
+    <label>Source name <span class="color"><input id="sourceColor" type="text" value="#FFFFFF"><input id="sourceColorPicker" type="color" value="#FFFFFF"></span></label>
+    <label>Volume <span class="color"><input id="volumeColor" type="text" value="#FFFFFF"><input id="volumeColorPicker" type="color" value="#FFFFFF"></span></label>
+    <label>Bar fill <span class="color"><input id="barColor" type="text" value="#FFFFFF"><input id="barColorPicker" type="color" value="#FFFFFF"></span></label>
+    <label>Bar track <span class="color"><input id="barBackgroundColor" type="text" value="#404040"><input id="barBackgroundColorPicker" type="color" value="#404040"></span></label>
+    <label>Bar border <span class="color"><input id="barBorderColor" type="text" value="#FFFFFF"><input id="barBorderColorPicker" type="color" value="#FFFFFF"></span></label>
+    <label>Background <span class="color"><input id="backgroundColor" type="text" value="#000000"><input id="backgroundColorPicker" type="color" value="#000000"></span></label>
+  </fieldset>
+  <script>
+    const defaults = { targetId:'system', step:5, pressAction:'toggleMute', showIcon:true, showSource:true, showVolume:true, showBar:true, iconColor:'#FFFFFF', sourceColor:'#FFFFFF', volumeColor:'#FFFFFF', barColor:'#FFFFFF', barBackgroundColor:'#404040', barBorderColor:'#FFFFFF', backgroundColor:'#000000' };
+    const query = new URLSearchParams(location.search);
+    const context = query.get('context');
+    const action = query.get('action') || 'com.dialmix.audio.control';
+    const socket = new WebSocket(`ws://${query.get('port') || location.host}`);
+    const target = document.querySelector('#target');
+    const fields = ['step','press','showIcon','showSource','showVolume','showBar','iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'];
+    const value = id => document.querySelector(`#${id}`);
+    function setColor(id, color) { value(id).value = color; value(`${id}Picker`).value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#FFFFFF'; }
+    function applySettings(raw) { const s = { ...defaults, ...(raw || {}) }; target.value = s.targetId || defaults.targetId; value('step').value = s.step; value('press').value = s.pressAction; ['showIcon','showSource','showVolume','showBar'].forEach(id => value(id).checked = s[id] !== false); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => setColor(id, s[id] || defaults[id])); }
+    function currentSettings() { const s = { targetId:target.value, step:Math.max(1, Math.min(100, Number(value('step').value) || 5)), pressAction:value('press').value }; ['showIcon','showSource','showVolume','showBar'].forEach(id => s[id] = value(id).checked); ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => s[id] = value(id).value.toUpperCase()); return s; }
+    function save() { socket.send(JSON.stringify({ event:'setSettings', action, context, payload:currentSettings() })); }
+    socket.onopen = () => socket.send(JSON.stringify({ event:'getSettings', action, context }));
+    socket.onmessage = event => { const message = JSON.parse(event.data); if (message.event === 'didReceiveSettings') applySettings(message.payload.settings); if (message.event === 'sendToPropertyInspector') { const data = message.payload || {}; (data.targets || []).forEach(x => target.add(new Option(`${x.type}: ${x.name}`, x.id))); applySettings(data.settings); } };
+    fields.forEach(id => value(id).addEventListener('change', save));
+    ['iconColor','sourceColor','volumeColor','barColor','barBackgroundColor','barBorderColor','backgroundColor'].forEach(id => value(`${id}Picker`).addEventListener('input', event => { setColor(id, event.target.value); save(); }));
+  </script>
+</body>
+</html>
