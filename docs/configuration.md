@@ -23,7 +23,7 @@ The plugin checks the latest non-draft release at `github.com/jbakalarski/DialMi
 
 - icon for the selected target type;
 - source name;
-- current volume percentage, or `MUTED` when the target is muted;
+- current volume percentage, dimmed when the target is muted;
 - volume bar.
 
 All four elements are enabled by default. For application targets, `Automatically load application icon` uses the icon embedded in the application's executable. A custom icon can be selected directly from an SVG or PNG file in the property inspector, or supplied as SVG/data URL text. A custom icon overrides the automatic and built-in icons when provided. The icon, source name, volume text, bar fill, bar track, bar border, and background colors can be changed independently with six-digit hexadecimal colors such as `#FFFFFF`. The default foreground color is `#FFFFFF`; the dark track and background provide contrast for the white feedback.
