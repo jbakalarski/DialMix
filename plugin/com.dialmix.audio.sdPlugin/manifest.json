@@ -1,0 +1,20 @@
+{
+  "Author": "DialMix contributors",
+  "CodePath": "plugin.js",
+  "Description": "Control Windows Core Audio sessions and devices with OpenDeck encoders.",
+  "Name": "DialMix",
+  "Version": "1.0.0",
+  "SDKVersion": 2,
+  "UUID": "com.dialmix.audio",
+  "Icon": "images/plugin",
+  "OS": [ { "Platform": "windows", "MinimumVersion": "10" } ],
+  "Actions": [ {
+    "Name": "Audio control",
+    "UUID": "com.dialmix.audio.control",
+    "Tooltip": "Control a Windows audio target",
+    "Icon": "images/action",
+    "PropertyInspectorPath": "inspector.html",
+    "Controllers": [ "Encoder", "Keypad" ],
+    "SupportedInMultiActions": true
+  } ]
+}

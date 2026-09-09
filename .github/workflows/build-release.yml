@@ -1,0 +1,40 @@
+name: Build and draft release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.x' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: dotnet publish src/DialMix/DialMix.csproj -c Release -o artifacts/DialMix
+      - run: npm ci
+      - run: npm test
+      - run: npm run package
+      - name: Verify package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/DialMix.streamDeckPlugin)) { throw 'DialMix.streamDeckPlugin was not generated' }
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $previous = git describe --tags --abbrev=0 2>$null
+          if (-not $previous) { $previous = (git rev-list --max-parents=0 HEAD) }
+          $changes = git log "$previous..HEAD" --pretty=format:'- %s'
+          if (-not $changes) { $changes = '- Initial DialMix build' }
+          "DialMix Development Build — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))`n`nHighlights:`n$changes" | Out-File release-notes.md -Encoding utf8
+          "RELEASE_NAME=DialMix Development Build — $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release-notes.md
+          draft: true
+          files: dist/DialMix.streamDeckPlugin

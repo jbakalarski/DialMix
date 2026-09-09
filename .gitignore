@@ -1,0 +1,10 @@
+bin/
+obj/
+TestResults/
+.vs/
+*.user
+*.suo
+dist/
+artifacts/
+node_modules/
+*.streamDeckPlugin
